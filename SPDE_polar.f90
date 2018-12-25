@@ -1,7 +1,7 @@
 module SPDE
 implicit none
 private
-    public :: init_seed, dw, exit_traj
+    public :: init_seed, dw, exit_traj, pi
     real(8), parameter :: pi = 3.14159265358979323846_8
 contains
 
@@ -65,46 +65,50 @@ end module SPDE
 program elliptic_PDE
 use SPDE
 implicit none
-    real(8), allocatable :: u_mesh(:,:), u_mesh_exact(:,:)
-    real(8) :: dt, x(2), du2, esti_val
+    real(8), allocatable :: u_mesh(:), u_mesh_exact(:)
+    real(8) :: dt, x(2), du2, esti_val, dr
     character(len=100) :: buffer
 	integer :: i,j,k,N,NMC
     
 	open(unit=111, file='sde.parm')
 	read(111,*) buffer
 	read(111,*) N, dt, NMC
-    allocate(u_mesh(N,N), u_mesh_exact(N,N))
+    allocate(u_mesh(N), u_mesh_exact(N))
 
 	call init_seed()
 
     u_mesh = 0
 	u_mesh_exact = 0
 	du2 = 0
+	dr = 1.0/real(N)
 	
+	!-- choose a polar axis
     do i=1,N
-        do j=1,N
-            x(1) = real(i-1)/real(N)
-            x(2) = real(j-1)/real(N)
-            if(sum(x**2) > 1.0) exit
-            do k=1,NMC
-                call exit_traj(x, dt, esti_val)
-                u_mesh(i,j) = u_mesh(i,j) + esti_val
-            enddo
-            u_mesh(i,j) = u_mesh(i,j) / real(NMC)
-        	u_mesh_exact(i,j) = 0.5 * sum(x**2)
-			du2 = du2 + (u_mesh(i,j)-u_mesh_exact(i,j))**2
-		enddo
-		print *, 'complete ', real(i)/real(N), '%'
+        x(1) = real(i-1)/real(N)
+        x(2) = 0.0_8
+        do k=1,NMC
+            call exit_traj(x, dt, esti_val)
+            u_mesh(i) = u_mesh(i) + esti_val
+        enddo
+        u_mesh(i) = u_mesh(i) / real(NMC)
+        u_mesh_exact(i) = 0.5 * sum(x**2)
+        
+        !-- L2 norm of u-u_exact in D
+		du2 = du2 + 2*pi*x(1)*dr*(u_mesh(i)-u_mesh_exact(i))**2
+		
+		print *, 'complete ', real(100*i)/real(N), '%'
     enddo
     
-	print *, 'dtime=', dt, ', with error2 = ', du2/real(N*N)
+	print *, 'dtime=', dt, ', with error2 = ', du2
+	print *, sum(2*pi*0.5*0.1*(u_mesh-u_mesh_exact)**2)
 
     open(unit=222, file='u_mesh.dat')
     open(unit=333, file='u_mesh_exact.dat')
-	do i=1,N
-        write(222,*) u_mesh(i,:)
-		write(333,*) u_mesh_exact(i,:)
+    do i=1,N
+    write(222,*) u_mesh(i)
+    write(333,*) u_mesh_exact(i)
     enddo
     close(unit=222)
 	close(unit=333)
+	
 end program elliptic_PDE
